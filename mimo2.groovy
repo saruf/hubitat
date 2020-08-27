@@ -1,5 +1,5 @@
 metadata {
-	definition (name: "MIMO2+", namespace: "saruf", author: "SruAn") {
+	definition (name: "MIMO2+", namespace: "saruf", author: "Saruf Alam") {
         
         capability "Sensor"
         capability "Contact Sensor"
@@ -18,7 +18,6 @@ metadata {
         command "measureVolt2"
         
         fingerprint deviceId: "0520", inClusters: "0x5E,0x86,0x72,0x5A,0x59,0x71,0x85,0x8E,0x73,0x25,0x31,0x70,0x60,0x98,0x7A"
-
     }
     preferences {
         input name:"TimePeriod", type:"number", title: "Time Period (min)", description: "time between periodic data send (minimum 30 seconds)", defaultValue: 0, displayDuringSetup: true, required: false
@@ -38,15 +37,16 @@ def parse (String description) {
 def CalculateVoltage(ADCvalue) // used to calculate the voltage based on the collected Scaled sensor value of the multilevel sensor event
 {
     def volt = (((2.396*(10**-17))*(ADCvalue**5)) - ((1.817*(10**-13))*(ADCvalue**4)) + ((5.087*(10**-10))*(ADCvalue**3)) - ((5.868*(10**-7))*(ADCvalue**2)) + ((9.967*(10**-4))*(ADCvalue)) - (1.367*(10**-2)))
-	return volt.round(1)
+	return volt
 }
+
 
 ////////////////////////////////////////////////////
 //Helper Function to access command and endpoints///
 ////////////////////////////////////////////////////
 private endpointcmd (cmd, endpoint){    
     
-    return (zwave.multiChannelV3.multiChannelCmdEncap(bitAddress: false, sourceEndPoint:0, destinationEndPoint: endpoint).encapsulate(cmd)).format()
+    return (zwave.multiChannelV4.multiChannelCmdEncap(bitAddress: false, sourceEndPoint:0, destinationEndPoint: endpoint).encapsulate(cmd)).format()
 }
 
 ////////////////////////////////////////////////////
@@ -102,7 +102,7 @@ def measureVolt1(){
     
     log.debug "Reading SIG1"
     endpoint = 1
-    cmd = zwave.sensorMultilevelV5.sensorMultilevelGet(sensorType: 2)
+    cmd = zwave.sensorMultilevelV9.sensorMultilevelGet(sensorType: 2)
     return (endpointcmd(cmd, endpoint))
     
 }
@@ -114,7 +114,7 @@ def measureVolt2(){
           
     log.debug "Reading SIG2"
     endpoint = 2
-    cmd = zwave.sensorMultilevelV5.sensorMultilevelGet(sensorType: 2)
+    cmd = zwave.sensorMultilevelV9.sensorMultilevelGet(sensorType: 2)
     return (endpointcmd(cmd, endpoint))
     
 }
@@ -129,7 +129,7 @@ def prepareByte(time){
     //time is controlled in 30 second intervals for MIMOs
     byte scaledTime = Math.round(Double.parseDouble(time)*2)
     //OR time with byte
-    byte setting = 0b10000000
+    byte setting = 0b00000000
     setting = setting + scaledTime  
     return setting
 }
@@ -139,10 +139,10 @@ def prepareByte(time){
 ////////////////////////////////////////////////////
 def configure(){
    
-    //byte paramValue = prepareByte(TimePeriod)
+    byte paramValue = prepareByte(TimePeriod)
     def cmds = []
-    cmds.add(zwave.configurationV1.configurationSet(size:1, parameterNumber:3, scaledConfigurationValue:0x01).format())
-    cmds.add(zwave.configurationV1.configurationSet(size:1, parameterNumber:9, scaledConfigurationValue:0x01).format())
+    cmds.add(zwave.configurationV1.configurationSet(size:1, parameterNumber:3, scaledConfigurationValue:0x00).format())
+    cmds.add(zwave.configurationV1.configurationSet(size:1, parameterNumber:9, scaledConfigurationValue:0x00).format())
     delayBetween(cmds, 200)
 
     log.debug "Configured to poll ${TimePeriod} minutes"
@@ -154,11 +154,8 @@ def refresh()
     if (logEnable) log.debug "Refresh"
 
     def cmds = []
-    cmds.add(zwave.versionV1.versionGet().format())
+    cmds.add(zwave.versionV3.versionGet().format())
 
-    // Relay configs
-    cmds.add(zwave.configurationV1.configurationGet(parameterNumber: 1).format())
-    cmds.add(zwave.configurationV1.configurationGet(parameterNumber: 2).format())
     // Signal 1 configs
     cmds.add(zwave.configurationV1.configurationGet(parameterNumber: 3).format())
     cmds.add(zwave.configurationV1.configurationGet(parameterNumber: 4).format())
@@ -172,8 +169,8 @@ def refresh()
     cmds.add(zwave.configurationV1.configurationGet(parameterNumber: 13).format())
     cmds.add(zwave.configurationV1.configurationGet(parameterNumber: 14).format())
     // Signal status
-    cmds.add(endpointcmd(zwave.sensorMultilevelV5.sensorMultilevelGet(sensorType: 2), 1))
-    cmds.add(endpointcmd(zwave.sensorMultilevelV5.sensorMultilevelGet(sensorType: 2), 2))
+    cmds.add(endpointcmd(zwave.sensorMultilevelV9.sensorMultilevelGet(sensorType: 2), 1))
+    cmds.add(endpointcmd(zwave.sensorMultilevelV9.sensorMultilevelGet(sensorType: 2), 2))
     // Relay status
     cmds.add(endpointcmd(zwave.switchBinaryV1.switchBinaryGet(), 3))
     cmds.add(endpointcmd(zwave.switchBinaryV1.switchBinaryGet(), 4))
@@ -188,8 +185,9 @@ def refresh()
 //////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////
 
+
 //Get the command and then overload another function related to that command
-def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd){
+def zwaveEvent(hubitat.zwave.commands.multichannelv4.MultiChannelCmdEncap cmd){
     
     def encapCmd = cmd.encapsulatedCommand()
     
@@ -203,7 +201,7 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd){
     return null      
 }
 
-def zwaveEvent(int endpoint, hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd){
+def zwaveEvent(int endpoint, hubitat.zwave.commands.switchbinaryv2.SwitchBinaryReport cmd){
     
     log.debug ("endpoint: ${endpoint} for binary switch")
     
@@ -212,56 +210,8 @@ def zwaveEvent(int endpoint, hubitat.zwave.commands.switchbinaryv1.SwitchBinaryR
 }
 
 def zwaveEvent(int endpoint, hubitat.zwave.commands.sensormultilevelv11.SensorMultilevelReport cmd){
-     
+    
     volts = CalculateVoltage(cmd.scaledSensorValue)
     log.debug "ADC ${endpoint} has value ${cmd.scaledSensorValue}: ${volts} V"
     
-}
-
-
-def zwaveEvent(hubitat.zwave.commands.configurationv1.ConfigurationReport cmd)
-{
-    if (logEnable) log.debug "ConfigurationReport: ${cmd.toString()}"
-
-    switch (cmd.parameterNumber)
-    {
-        case 1:
-            state.rel1Config = cmd.configurationValue[0]
-            break
-        case 2:
-            state.rel2Config = cmd.configurationValue[0]
-            break
-        case 3:
-            state.sig1MultiTriggerSettings = cmd.configurationValue[0]
-            break
-        case 4:
-            state.sig1LowerThresholdHigh = cmd.configurationValue[0]
-            break
-        case 5:
-            state.sig1LowerThresholdLow = cmd.configurationValue[0]
-            break
-        case 6:
-            state.sig1UpperThresholdHigh = cmd.configurationValue[0]
-            break
-        case 7:
-            state.sig1UpperThresholdLow = cmd.configurationValue[0]
-            break
-        case 9:
-            state.sig2MultiTriggerSettings = cmd.configurationValue[0]
-            break
-        case 10:
-            state.sig2LowerThresholdHigh = cmd.configurationValue[0]
-            break
-        case 11:
-            state.sig2LowerThresholdLow = cmd.configurationValue[0]
-            break
-        case 12:
-            state.sig2UpperThresholdHigh = cmd.configurationValue[0]
-            break
-        case 13:
-            state.sig2UpperThresholdLow = cmd.configurationValue[0]
-            break
-        default:
-            if (logEnable) log.debug "Unknown Configuration Report Received ConfigurationReport: ${cmd.toString()}"
-    }
 }
