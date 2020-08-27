@@ -141,8 +141,8 @@ def configure(){
    
     byte paramValue = prepareByte(TimePeriod)
     def cmds = []
-    cmds.add(zwave.configurationV1.configurationSet(size:1, parameterNumber:3, scaledConfigurationValue:0x00).format())
-    cmds.add(zwave.configurationV1.configurationSet(size:1, parameterNumber:9, scaledConfigurationValue:0x00).format())
+    cmds.add(zwave.configurationV1.configurationSet(size:1, parameterNumber:3, scaledConfigurationValue:paramValue).format())
+    cmds.add(zwave.configurationV1.configurationSet(size:1, parameterNumber:9, scaledConfigurationValue:paramValue).format())
     delayBetween(cmds, 200)
 
     log.debug "Configured to poll ${TimePeriod} minutes"
@@ -204,7 +204,6 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv4.MultiChannelCmdEncap cmd){
 def zwaveEvent(int endpoint, hubitat.zwave.commands.switchbinaryv2.SwitchBinaryReport cmd){
     
     log.debug ("endpoint: ${endpoint} for binary switch")
-    
     return null
     
 }
@@ -213,5 +212,13 @@ def zwaveEvent(int endpoint, hubitat.zwave.commands.sensormultilevelv11.SensorMu
     
     volts = CalculateVoltage(cmd.scaledSensorValue)
     log.debug "ADC ${endpoint} has value ${cmd.scaledSensorValue}: ${volts} V"
-    
+    if (endpoint==1){
+        state.voltage = cmd.scaledSensorValue
+        return createEvent(name: "voltage", value: volts, unit: "volts")
+    }else if(endpoint==2){
+        state.voltage2 = cmd.scaledSensorValue
+        return createEvent(name: "voltage2", value: volts, unit: "volts")
+    }else{
+        return createEvent(name: "Error", value: -1)
+    }   
 }
